@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f1f1f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>독서 도우미</title>
+<link rel="manifest" href='data:application/json,{"name":"독서 도우미","short_name":"독서","start_url":".","display":"standalone","background_color":"%231f1f1f","theme_color":"%231f1f1f"}'>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;background:#1f1f1f;color:#eee;height:100dvh;display:flex;flex-direction:column}
+header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333}
+header h1{font-size:17px;font-weight:600}
+header button{background:none;border:1px solid #555;color:#aaa;border-radius:8px;padding:6px 10px;font-size:13px}
+#chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:12px 14px;border-radius:14px;line-height:1.6;font-size:15px;white-space:pre-wrap}
+.user{align-self:flex-end;background:#3a5a8c}
+.bot{align-self:flex-start;background:#2e2e2e}
+.sys{align-self:center;color:#888;font-size:13px}
+footer{padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #333;display:flex;gap:8px;align-items:flex-end}
+textarea{flex:1;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:12px;padding:10px;font-size:15px;resize:none;max-height:120px;font-family:inherit}
+.btn{border:none;border-radius:12px;padding:0 14px;height:44px;font-size:15px;color:#fff;background:#4a7bd0}
+#mic{background:#555;width:44px;font-size:20px}
+#mic.on{background:#d04a4a;animation:p 1s infinite}
+@keyframes p{50%{opacity:.6}}
+#setup{position:fixed;inset:0;background:#1f1f1f;padding:24px;display:none;flex-direction:column;gap:14px;justify-content:center}
+#setup input{background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:10px;padding:12px;font-size:15px}
+#setup label{font-size:14px;color:#aaa}
+</style>
+</head>
+<body>
+<header><h1>📖 독서 도우미</h1><div><button id="ttsBtn">🔊 켜짐</button> <button id="setBtn">설정</button></div></header>
+<div id="chat"><div class="msg sys">이해하기 어려운 구절을 읽어주거나 입력하세요.<br>쉽게 풀어서 설명해 드릴게요.</div></div>
+<footer>
+<button class="btn" id="mic">🎤</button>
+<textarea id="inp" rows="1" placeholder="구절을 입력하거나 마이크를 누르세요"></textarea>
+<button class="btn" id="send">전송</button>
+</footer>
+<div id="setup">
+<h2>설정</h2>
+<label>Anthropic API 키</label><input id="key" type="password" placeholder="sk-ant-...">
+<label>읽고 있는 책 (선택)</label><input id="book" placeholder="예: 사피엔스 - 유발 하라리">
+<label>설명 스타일</label><input id="style" placeholder="예: 중학생도 이해할 수 있게, 예시 들어서">
+<button class="btn" id="save">저장</button>
+<button class="btn" id="clear" style="background:#444">대화 초기화</button>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const chat=$('#chat'),inp=$('#inp');
+let cfg=JSON.parse(localStorage.getItem('cfg')||'{}');
+let history=JSON.parse(sessionStorage.getItem('hist')||'[]');
+let tts=true;
+function showSetup(){$('#setup').style.display='flex';$('#key').value=cfg.key||'';$('#book').value=cfg.book||'';$('#style').value=cfg.style||''}
+$('#setBtn').onclick=showSetup;
+$('#save').onclick=()=>{cfg={key:$('#key').value.trim(),book:$('#book').value.trim(),style:$('#style').value.trim()};localStorage.setItem('cfg',JSON.stringify(cfg));$('#setup').style.display='none'};
+$('#clear').onclick=()=>{history=[];sessionStorage.removeItem('hist');chat.innerHTML='';add('sys','대화를 초기화했어요.');$('#setup').style.display='none'};
+$('#ttsBtn').onclick=()=>{tts=!tts;$('#ttsBtn').textContent=tts?'🔊 켜짐':'🔇 꺼짐';if(!tts)speechSynthesis.cancel()};
+if(!cfg.key)showSetup();
+function add(cls,text){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
+history.forEach(m=>add(m.role==='user'?'user':'bot',m.content));
+function speak(t){if(!tts||!('speechSynthesis' in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.replace(/[*#_`]/g,''));u.lang='ko-KR';u.rate=1.0;speechSynthesis.speak(u)}
+function sysPrompt(){return `당신은 독서를 돕는 친근한 한국어 대화 상대입니다. 사용자가 책에서 이해하기 어려운 구절을 읽어주거나 입력하면, 그 구절의 의미를 쉽고 자연스러운 한국어로 풀어서 설명합니다.
+규칙:
+- 번역투 없이 자연스러운 구어체로, 친구에게 설명하듯 말합니다.
+- 먼저 핵심을 한두 문장으로 말하고, 필요하면 일상적인 예시 하나를 듭니다.
+- 음성으로 읽히므로 목록, 표, 마크다운 기호를 쓰지 않고 짧은 문장으로 말합니다. 전체 길이는 5문장 이내.
+- 음성 인식 오류로 보이는 단어는 문맥으로 바로잡아 해석합니다.
+- 설명 끝에 필요할 때만 짧은 확인 질문을 하나 덧붙입니다.
+${cfg.book?`현재 읽는 책: ${cfg.book}`:''}
+${cfg.style?`설명 스타일 요청: ${cfg.style}`:''}`}
+async function send(){const t=inp.value.trim();if(!t)return;if(!cfg.key){showSetup();return}
+inp.value='';inp.style.height='auto';add('user',t);history.push({role:'user',content:t});
+const wait=add('bot','…');$('#send').disabled=true;
+try{const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:600,system:sysPrompt(),messages:history.slice(-20)})});
+const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
+const a=j.content.map(c=>c.text||'').join('');wait.textContent=a;history.push({role:'assistant',content:a});sessionStorage.setItem('hist',JSON.stringify(history));speak(a)}
+catch(e){wait.textContent='오류: '+e.message;wait.className='msg sys'}
+$('#send').disabled=false;chat.scrollTop=chat.scrollHeight}
+$('#send').onclick=send;
+inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=inp.scrollHeight+'px'});
+inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send()}});
+// 음성 인식
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,listening=false;
+if(SR){rec=new SR();rec.lang='ko-KR';rec.interimResults=true;rec.continuous=true;let fin='';
+rec.onresult=e=>{let it='';for(let i=e.resultIndex;i<e.results.length;i++){const s=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=s+' ';else it+=s}inp.value=fin+it;inp.dispatchEvent(new Event('input'))};
+rec.onend=()=>{if(listening){listening=false;$('#mic').classList.remove('on');if(inp.value.trim())send()}fin=''};
+rec.onerror=e=>{add('sys','음성 인식 오류: '+e.error)};
+$('#mic').onclick=()=>{if(listening){listening=false;rec.stop()}else{speechSynthesis.cancel();fin='';inp.value='';listening=true;$('#mic').classList.add('on');rec.start()}}}
+else{$('#mic').onclick=()=>add('sys','이 브라우저는 음성 인식을 지원하지 않아요. Chrome이나 Safari를 사용해 주세요.')}
+</script>
+</body>
+</html>
